@@ -1,0 +1,302 @@
+---
+title: "analysis_3"
+author: "Laura Christen"
+date: '2022-07-22'
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+#set some global options
+knitr::opts_chunk$set(echo=FALSE, warning = FALSE, message = FALSE)
+
+#turn off scientific notation and round to 3 decimals
+options(scipen=999, digits=3)
+
+df <- read.csv("data.csv", fileEncoding="UTF-8-BOM", na.strings=c(""))
+
+library(dplyr)
+```
+
+```{r}
+#reverse code variables
+
+df$emp8R <- 5-df$emp8
+
+df$ref1R <- 5-df$ref1
+df$ref3R <- 5-df$ref3
+df$ref6R <- 5-df$ref6
+df$ref8R <- 5-df$ref8
+df$ref10R <- 5-df$ref10
+df$ref12R <- 5-df$ref12
+```
+
+```{r}
+df$empathy <- rowMeans(dplyr::select(df, emp1, emp2, emp3, emp4, emp5, emp6, emp7, emp8R, emp9, emp10, emp11, emp12, emp13, emp14, emp15, emp16))
+
+df$refugees <- rowMeans(dplyr::select(df, ref1R, ref2, ref3R, ref4, ref5, ref6R, ref7, ref8R, ref9, ref10R, ref11, ref12R))
+
+#hist(df$langprof, xlab='Language Proficiency')
+
+df <- df %>% mutate(langprof = case_when(langprof == 10 ~ 'mono',
+                                             langprof > 10 ~ 'biling'))
+
+#df
+df1 <- dplyr::select(df, langprof, refugees, empathy)
+
+#df1
+```
+
+#Descriptive statistics by langprof group
+```{r}
+dplyr::group_by(df1, langprof) %>% 
+  dplyr::summarise(Mean = mean(empathy, na.rm = T),
+                 S.D. = sd(empathy, na.rm = T),
+                 N = n()) %>% 
+  flextable::flextable()
+
+dplyr::group_by(df1, langprof) %>% 
+  dplyr::summarise(Mean = mean(refugees, na.rm = T),
+                 S.D. = sd(refugees, na.rm = T),
+                 N = n())  %>% 
+  flextable::flextable()
+```
+
+
+#demographic variables
+```{r}
+df2 <- dplyr::select(df, langprof, empathy, refugees, gender, age, education, work, religion, ethnic, politic, liveabroad, dist, ukraine)
+
+df2<-subset(df2, gender!="Non-binary / third gender" & gender!="Prefer not to say" & work!="Prefer not to say" & religion!="Prefer not to say" & ethnic!="Prefer not to say" & education!="Other / prefer not to say")
+
+#gender
+df2$male <- ifelse(df2$gender == 'Male', 1, 0)
+
+
+#education
+df2 <- df2 %>% mutate(education = case_when(education == 'Primary education' ~ 'lower_ed',
+                                            education == 'Upper secondary education (up to age 18)' ~ 'lower_ed',
+                                            education == 'Lower secondary education (up to age 16)' ~ 'lower_ed',
+                                            education == "Bachelor's degree or equivalent" ~ 'upper_ed',
+                                            education == "Postgraduate or Master's degree or equivalent" ~ 'upper_ed'))
+
+df2$upper_ed <- ifelse(df2$education == 'upper_ed', 1, 0)
+
+
+#work status
+df2 <- df2 %>% mutate(work = case_when(work == 'Unskilled/casual work (e.g., labourer, cleaner, fruit-picker)' ~ 'Work',
+                                       work == 'Non-manual skilled (office-based employment; e.g., secretary, administrator, assistant manager)' ~ 'Work',
+                                       work == 'Professional or managerial (e.g., lawyer, university teacher, company manager)' ~ 'Work',
+                                       work == "Semi-skilled manual work (e.g., shop assistant, driver, waiter/waitress" ~ 'Work',
+                                       work == "Skilled manual work (e.g., electrician, hairdresser, plumber)" ~ 'Work',
+                                       work == 'Unskilled/casual work (e.g., labourer, cleaner, fruit-picker)' ~ 'Work', 
+                                       work == 'Student' ~ 'Student',
+                                       work == 'Retired' ~ 'Retired'
+))
+
+df2$Working <- ifelse(df2$work == 'Work', 1, 0)
+df2$Retired <- ifelse(df2$work == 'Retired', 1, 0)
+
+
+#religion
+df2 <- df2 %>% mutate(religion = case_when(religion == 'Agnostic' ~ 'None',
+religion == 'Christian (any denomination)' ~ 'Christian',                     
+religion == 'Church of England' ~ 'Christian',                                        religion == "Hindu" ~ 'Other',
+religion == "Jewish" ~ 'Other',
+religion == 'Muslim (Sunni or Shia)' ~ 'Other',
+religion == 'No religious affiliation' ~ 'None',                                       religion == 'Pagan' ~ 'Other',
+religion == 'Pagan (Animist, see spirit in all things)' ~ 'Other',
+religion == 'Spiritual' ~ 'Other',
+religion == 'Other (please specify):' ~ 'Other'))
+
+df2$Christian <- ifelse(df2$religion == 'Christian', 1, 0)
+df2$OtherRel <- ifelse(df2$religion == 'Other', 1, 0)
+
+#ethnicity
+df2 <- df2 %>% mutate(ethnic = case_when(ethnic == 'White (including British, Irish, or any other White background)' ~ 'White',
+                                       ethnic == 'Asian (e.g. Indian, Pakistani, Bangladeshi, Chinese)' ~ 'Other',
+                                       ethnic == 'Black, African, Carribean, or Black British' ~ 'Other',
+                                       ethnic == "Mixed or multiple ethnic backgrounds (e.g. White and Black Caribbean, White and Asian)" ~ 'Other',
+                                       ethnic == "Other ethnic group" ~ 'Other'))
+
+
+df2$NonWhite <- ifelse(df2$ethnic == 'Other', 1, 0)
+
+#Ukrainian
+df2$ukraine <- ifelse(df2$ukraine == 'Ukrainian', 1, 0)
+
+#df2 <- na.omit(df2)
+# df2
+
+#Testing with just covariates
+model1 <- lm(refugees ~ male + upper_ed + Working + Retired + Christian + NonWhite + OtherRel + age, df2)
+summary(model1)
+
+jtools::summ(model1, part.cor=T)$coeftable %>% 
+  data.frame() %>% 
+  round(3) %>% 
+  dplyr::rename(B = Est.,
+                t = t.val.,
+                "Semipartial r" = part.r) %>% 
+  dplyr::select(-c(partial.r)) %>% 
+  tibble::rownames_to_column("Term") %>% 
+  flextable::flextable()
+```
+
+
+#Now testing with predictor (the total effect)
+```{r}
+df2$Biling <- ifelse(df2$langprof == 'biling', 1, 0)
+
+model2 <- lm(refugees ~ male + upper_ed + Working + Retired + Christian + NonWhite + OtherRel + age + Biling, df2)
+summary(model2)
+
+jtools::summ(model2, part.cor=T)$coeftable %>% 
+  data.frame() %>% 
+  round(3) %>% 
+  dplyr::rename(B = Est.,
+                t = t.val.,
+                "Semipartial r" = part.r) %>% 
+  dplyr::select(-c(partial.r)) %>% 
+  tibble::rownames_to_column("Term") %>% 
+  flextable::flextable()
+```
+
+#Now testing with Ukraine
+```{r}
+modelq <- lm(refugees ~ male + upper_ed + Working + Retired + Christian + NonWhite + OtherRel + age + ukraine + Biling, df2)
+summary(modelq)
+
+jtools::summ(modelq, part.cor=T)$coeftable %>% 
+  data.frame() %>% 
+  round(3) %>% 
+  dplyr::rename(B = Est.,
+                t = t.val.,
+                "Semipartial r" = part.r) %>% 
+  dplyr::select(-c(partial.r)) %>% 
+  tibble::rownames_to_column("Term") %>% 
+  flextable::flextable()
+```
+
+
+#HYPOTHESIS 1B
+```{r}
+model3 <- lm(empathy ~ male + upper_ed + Working + Retired + Christian + NonWhite + OtherRel + age + Biling, df2)
+summary(model3)
+
+jtools::summ(model3, part.cor=T)$coeftable %>% 
+  data.frame() %>% 
+  round(3) %>% 
+  dplyr::rename(B = Est.,
+                t = t.val.,
+                "Semipartial r" = part.r) %>% 
+  dplyr::select(-c(partial.r)) %>% 
+  tibble::rownames_to_column("Term") %>% 
+  flextable::flextable()
+```
+
+#HYPOTHESIS 1C
+```{r}
+modele <- lm(refugees ~ male + upper_ed + Working + Retired + Christian + NonWhite + OtherRel + age + empathy, df2)
+summary(modelq)
+
+jtools::summ(modele, part.cor=T)$coeftable %>% 
+  data.frame() %>% 
+  round(3) %>% 
+  dplyr::rename(B = Est.,
+                t = t.val.,
+                "Semipartial r" = part.r) %>% 
+  dplyr::select(-c(partial.r)) %>% 
+  tibble::rownames_to_column("Term") %>% 
+  flextable::flextable()
+```
+
+#HYPOTHESIS 2
+
+#Testing both
+```{r}
+model4 <- lm(refugees ~ male + upper_ed + Working + Retired + Christian + NonWhite + OtherRel + age + Biling + empathy, df2)
+summary(model4)
+
+jtools::summ(model4, part.cor=T)$coeftable %>% 
+  data.frame() %>% 
+  round(3) %>% 
+  dplyr::rename(B = Est.,
+                t = t.val.,
+                "Semipartial r" = part.r) %>% 
+  dplyr::select(-c(partial.r)) %>% 
+  tibble::rownames_to_column("Term") %>% 
+  flextable::flextable()
+```
+#The mediator (empathy) has a significant effect on the DV (refugees). The IV (Biling) is not individually a significant predictor
+
+
+#mediation
+```{r}
+#install.packages("mediation")
+library(mediation)
+
+covList <- list("age", "male", "upper_ed", "Working", "Retired", "Christian", "NonWhite", "OtherRel")
+
+results = mediate(model3, model4, treat = "Biling", mediator = "empathy", covariates = covList, boot=T)
+summary(results)
+```
+
+
+#HYPOTHESIS 3
+#Amongst those who speak another language, a longer amount of time spent abroad leads to higher levels of cognitive empathy, and therefore more positive perceptions of refugees.
+
+#Testing the total effect
+```{r}
+df3 <- subset(df2, langprof == "biling")
+
+model5 <- lm(refugees ~ male + upper_ed + Working + Retired + Christian + NonWhite + OtherRel + age + liveabroad, df3)
+summary(model5)
+```
+
+#Testing the mediator
+```{r}
+model6 <- lm(empathy ~ male + upper_ed + Working + Retired + Christian + NonWhite + OtherRel + age + liveabroad, df3)
+summary(model6)
+```
+
+#Testing both
+```{r}
+model7 <- lm(refugees ~ male + upper_ed + Working + Retired + Christian + NonWhite + OtherRel + age + liveabroad + empathy, df3)
+summary(model7)
+```
+
+#mediation
+```{r}
+results1 = mediate(model6, model7, treat = "liveabroad", mediator = "empathy", covariates = covList, boot=T)
+summary(results1)
+```
+
+
+#HYPOTHESIS 4
+#Amongst those who speak another language, the “further” the language is from English, the higher levels of cognitive empathy and therefore the more positive perceptions of refugees the participant will have.
+
+#Testing the total effect
+```{r}
+model8 <- lm(refugees ~ male + upper_ed + Working + Retired + Christian + NonWhite + OtherRel + age + dist, df3)
+summary(model8)
+```
+
+#Testing the mediator
+```{r}
+model9 <- lm(empathy ~ male + upper_ed + Working + Retired + Christian + NonWhite + OtherRel + age + dist, df3)
+summary(model9)
+```
+
+#Testing both
+```{r}
+model10 <- lm(refugees ~ male + upper_ed + Working + Retired + Christian + NonWhite + OtherRel + age + dist + empathy, df3)
+summary(model10)
+```
+
+#mediation
+```{r}
+results2 = mediate(model9, model10, treat = "dist", mediator = "empathy", covariates = covList, boot=T)
+summary(results2)
+```
